@@ -55,12 +55,18 @@ struct WebhookBody {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct WebhookEntry {
-    messaging: Vec<WebhookMessage>,
+    messaging: Vec<WebhookEvent>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct WebhookMessage {
+struct WebhookEvent {
     message: String,
+    sender: WebhookSender,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WebhookSender {
+    id: String,
 }
 
 // Creates the endpoint for our webhook
@@ -72,9 +78,14 @@ fn webhook_post(body: web::Json<WebhookBody>) -> impl Responder {
             .entry
             .iter()
             .filter_map(|entry| entry.messaging.first())
-            .map(|item| {
-                println!("{}", item.message);
-                item.message.clone()
+            .map(|webhook_event| {
+                println!("{}", webhook_event.message);
+
+                // Get the sender PSID
+                let sender_psid = webhook_event.sender.id.clone();
+                println!("Sender PSID: {}", sender_psid);
+
+                webhook_event.message.clone()
             })
             .collect();
 
