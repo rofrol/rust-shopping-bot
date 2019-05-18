@@ -25,17 +25,17 @@ fn main() -> std::io::Result<()> {
     println!("Starting on {}:{}", host, port);
 
     HttpServer::new(|| {
+        let webhook: actix_web::Scope = web::scope("/webhook").service(
+            web::resource("")
+                .route(web::post().to(webhook_post))
+                .route(web::get().to(webhook_get)),
+        );
+
         App::new()
             .wrap(middleware::Logger::default())
             .wrap(Cors::new().send_wildcard())
             .service(web::resource("/").to(index))
-            .service(
-                web::scope("/webhook").service(
-                    web::resource("")
-                        .route(web::post().to(webhook_post))
-                        .route(web::get().to(webhook_get)),
-                ),
-            )
+            .service(webhook)
             .default_service(web::route().to(HttpResponse::NotFound))
     })
     .bind((host, port))?
