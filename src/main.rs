@@ -7,12 +7,34 @@ extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 
+extern crate bytes;
+extern crate futures;
+use futures::{Future, Stream};
+
 use actix_web::{
     middleware, middleware::cors::Cors, web, App, HttpRequest, HttpResponse, HttpServer, Responder,
 };
 
 fn main() -> std::io::Result<()> {
-    ::std::env::set_var("RUST_LOG", "actix_web=info");
+    // DEBUG=true cargo run
+    // heroku config:set DEBUG=true
+    // heroku config:unset DEBUG
+    let debug = match env::var("DEBUG") {
+        Ok(_) => true,
+        Err(_) => false,
+    };
+    println!("debug: {}", debug);
+
+    env::set_var(
+        "RUST_LOG",
+        if debug {
+            "actix_web=debug"
+        } else {
+            "actix_web=info"
+        },
+    );
+    //env::set_var("RUST_BACKTRACE", "1");
+
     env_logger::init();
 
     // Get the port number to listen on.
@@ -24,7 +46,7 @@ fn main() -> std::io::Result<()> {
     let host = "0.0.0.0";
     println!("Starting on {}:{}", host, port);
 
-    HttpServer::new(|| {
+    HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
             .wrap(Cors::new().send_wildcard())
@@ -32,7 +54,11 @@ fn main() -> std::io::Result<()> {
             .service(
                 web::scope("/webhook").service(
                     web::resource("")
-                        .route(web::post().to(webhook_post))
+                        .route(if debug {
+                            web::post().to_async(webhook_post_debug)
+                        } else {
+                            web::post().to(webhook_post)
+                        })
                         .route(web::get().to(webhook_get)),
                 ),
             )
@@ -60,8 +86,15 @@ struct WebhookEntry {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct WebhookEvent {
-    message: String,
+    message: WebhookMessage,
     sender: WebhookSender,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WebhookMessage {
+    mid: String,
+    seq: i32,
+    text: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -69,8 +102,14 @@ struct WebhookSender {
     id: String,
 }
 
+// curl -H "Content-Type: application/json" -X POST "http://localhost:8080/webhook" -d @message.json
+// curl -H "Content-Type: application/json" -X POST "https://rust-shopping-bot.herokuapp.com/webhook" -d @message.json
 // Creates the endpoint for our webhook
 fn webhook_post(body: web::Json<WebhookBody>) -> impl Responder {
+    webhook_post_response(body.into_inner())
+}
+
+fn webhook_post_response(body: WebhookBody) -> HttpResponse {
     // Checks this is an event from a page subscription
     if body.object == "page" {
         // Iterates over each entry - there may be multiple if batched
@@ -79,13 +118,12 @@ fn webhook_post(body: web::Json<WebhookBody>) -> impl Responder {
             .iter()
             .filter_map(|entry| entry.messaging.first())
             .map(|webhook_event| {
-                println!("{}", webhook_event.message);
-
                 // Get the sender PSID
                 let sender_psid = webhook_event.sender.id.clone();
                 println!("Sender PSID: {}", sender_psid);
 
-                webhook_event.message.clone()
+                println!("{}", webhook_event.message.text);
+                webhook_event.message.text.clone()
             })
             .collect();
 
@@ -97,6 +135,20 @@ fn webhook_post(body: web::Json<WebhookBody>) -> impl Responder {
         // Returns a '404 Not Found' if event is not from a page subscription
         HttpResponse::NotFound().finish()
     }
+}
+
+fn webhook_post_debug(
+    req: HttpRequest,
+    pl: web::Payload,
+) -> impl Future<Item = HttpResponse, Error = actix_web::error::Error> {
+    println!("REQ: {:?}", req);
+    pl.concat2().from_err().and_then(|payload_body| {
+        // body is loaded, now we can deserialize json-rust
+        let str = std::str::from_utf8(&payload_body).unwrap();
+        println!("str: {}", str);
+        let body = serde_json::from_str::<WebhookBody>(&str).unwrap();
+        webhook_post_response(body)
+    })
 }
 
 #[derive(Deserialize, Serialize, Debug)]
