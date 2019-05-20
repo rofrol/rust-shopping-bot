@@ -2,9 +2,8 @@ extern crate actix_web;
 extern crate env_logger;
 use std::env;
 
-#[macro_use]
-extern crate serde_derive;
 extern crate serde;
+use serde::{Deserialize, Serialize};
 extern crate serde_json;
 
 extern crate bytes;
