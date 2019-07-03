@@ -10,6 +10,7 @@ Port of https://developers.facebook.com/docs/messenger-platform/getting-started/
 - https://dashboard.heroku.com/apps/rust-shopping-bot
 - https://rust-shopping-bot.herokuapp.com/
 - https://github.com/alexreg/ergo-bot is using https://github.com/nocotan/rmessenger/
+- got nothing https://github.com/fbsamples/messenger-platform-samples/pull/134/files#diff-dbc84bb7be1974a3b4ab3e5df3963f34R142
 
 ## Webhook
 
